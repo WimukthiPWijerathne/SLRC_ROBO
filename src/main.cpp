@@ -1,151 +1,135 @@
 #include <Arduino.h>
+// #include <Wire.h>
+// #include <MPU6050.h>
 
-// #define S0 18
-// #define S1 19
-// #define S2 5
-// #define S3 17
-// #define sensorOut 16
+// MPU6050 mpu;
+
+// long previousTime = 0;
+// float accAngleX, accAngleY, gyroAngleX, gyroAngleY, angleX, angleY;
+// float gyroX, gyroY, gyroZ;
+// float elapsedTime;
+// float alpha = 0.98; // Complementary filter weight
 
 // void setup() {
-//   Serial.begin(115200);
-
-//   pinMode(S0, OUTPUT);
-//   pinMode(S1, OUTPUT);
-//   pinMode(S2, OUTPUT);
-//   pinMode(S3, OUTPUT);
-//   pinMode(sensorOut, INPUT);
-
-//   // Set frequency scaling to 20% for stable readings
-//   digitalWrite(S0, HIGH);
-//   digitalWrite(S1, LOW);
+//     Serial.begin(115200);
+//     Wire.begin();
+    
+//     mpu.initialize();
+    
+//     if (!mpu.testConnection()) {
+//         Serial.println("MPU6050 connection failed!");
+//         while (1);
+//     }
+    
+//     Serial.println("MPU6050 initialized successfully!");
+//     delay(1000);
 // }
 
 // void loop() {
-//   int red, green, blue;
+//     long currentTime = millis();
+//     elapsedTime = (currentTime - previousTime) / 1000.0;
+//     previousTime = currentTime;
+    
+//     int16_t ax, ay, az, gx, gy, gz;
+//     mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-//   // Select RED filter
-//   digitalWrite(S2, LOW);
-//   digitalWrite(S3, LOW);
-//   red = pulseIn(sensorOut, LOW);
+//     // Convert raw accelerometer data to angles
+//     accAngleX = atan2(ay, az) * 180 / M_PI;
+//     accAngleY = atan2(-ax, sqrt(ay * ay + az * az)) * 180 / M_PI;
 
-//   // Select GREEN filter
-//   digitalWrite(S2, HIGH);
-//   digitalWrite(S3, HIGH);
-//   green = pulseIn(sensorOut, LOW);
+//     // Convert raw gyro data to angular velocity (dps)
+//     gyroX = gx / 131.0;
+//     gyroY = gy / 131.0;
+//     gyroZ = gz / 131.0;
 
-//   // Select BLUE filter
-//   digitalWrite(S2, LOW);
-//   digitalWrite(S3, HIGH);
-//   blue = pulseIn(sensorOut, LOW);
+//     // Integrate gyro data to get angles
+//     gyroAngleX += gyroX * elapsedTime;
+//     gyroAngleY += gyroY * elapsedTime;
 
-//   // Print RGB values
-//   Serial.print("R: "); Serial.print(red);
-//   Serial.print(" G: "); Serial.print(green);
-//   Serial.print(" B: "); Serial.println(blue);
+//     // Complementary filter to combine accelerometer and gyroscope values
+//     angleX = alpha * (angleX + gyroX * elapsedTime) + (1 - alpha) * accAngleX;
+//     angleY = alpha * (angleY + gyroY * elapsedTime) + (1 - alpha) * accAngleY;
 
-//   delay(500);
-// }
-// #define S0 21
-// #define S1 22
-// #define S2 18
-// #define S3 19
-// #define sensorOut 23
+//     // Display angles in Serial Monitor
+//     Serial.print("Roll (X): "); Serial.print(angleX); Serial.print("°  ");
+//     Serial.print("Pitch (Y): "); Serial.print(angleY); Serial.println("°");
 
-// void setup() {
-//   Serial.begin(115200);
-  
-//   pinMode(S0, OUTPUT);
-//   pinMode(S1, OUTPUT);
-//   pinMode(S2, OUTPUT);
-//   pinMode(S3, OUTPUT);
-//   pinMode(sensorOut, INPUT);
-  
-//   // Set frequency scaling to 20% for stable readings
-//   digitalWrite(S0, HIGH);
-//   digitalWrite(S1, LOW);
+//     delay(50);
 // }
 
-// void loop() {
-//   int red, green, blue;
-  
-//   // Read RED
-//   digitalWrite(S2, LOW);
-//   digitalWrite(S3, LOW);
-//   delay(100);
-//   red = pulseIn(sensorOut, LOW);
 
-//   // Read GREEN
-//   digitalWrite(S2, HIGH);
-//   digitalWrite(S3, HIGH);
-//   delay(100);
-//   green = pulseIn(sensorOut, LOW); 
+#include <HardwareSerial.h>
+#define TRIG_PIN 4
+#define ECHO_PIN 15
 
-//   // Read BLUE
-//   digitalWrite(S2, LOW);
-//   digitalWrite(S3, HIGH);
-//   delay(100);
-//   blue = pulseIn(sensorOut, LOW);
-
-//   // Print values
-//   Serial.print("Red: "); Serial.print(red);
-//   Serial.print(" | Green: "); Serial.print(green);
-//   Serial.print(" | Blue: "); Serial.println(blue);
-
-//   delay(500);
-// }
-
-#define S0 21
-#define S1 22
-#define S2 18
-#define S3 19
-#define sensorOut 23
+HardwareSerial mySerial(1);  // Use UART1
 
 void setup() {
-  Serial.begin(115200);  // Ensure Serial Monitor is set to 115200 baud
-  
-  pinMode(S0, OUTPUT);
-  pinMode(S1, OUTPUT);
-  pinMode(S2, OUTPUT);
-  pinMode(S3, OUTPUT);
-  pinMode(sensorOut, INPUT);
-  
-  // Set frequency scaling to 20%
-  digitalWrite(S0, HIGH);
-  digitalWrite(S1, LOW);
+    Serial.begin(115200);
+   
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+    mySerial.begin(9600, SERIAL_8N1, 16, 17); // RX=16, TX=17
+}
+void send () {
+    
+        mySerial.println("arrived");
+        delay(3000);
+    
 }
 
-void loop() {
-  int red, green, blue;
+float distance () {
+    
+  long duration;
+  float distance;
 
-  // Read RED
-  digitalWrite(S2, LOW);
-  digitalWrite(S3, LOW);
-  delay(100);
-  red = pulseIn(sensorOut, LOW);
-  
-  // Read GREEN
-  digitalWrite(S2, HIGH);
-  digitalWrite(S3, HIGH);
-  delay(100);
-  green = pulseIn(sensorOut, LOW); 
+  // Trigger the sensor
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(15);  // Increased pulse width
+  digitalWrite(TRIG_PIN, LOW);
 
-  // Read BLUE
-  digitalWrite(S2, LOW);
-  digitalWrite(S3, HIGH);
-  delay(100);
-  blue = pulseIn(sensorOut, LOW);
+  // Measure echo duration
+  duration = pulseIn(ECHO_PIN, HIGH);
+  Serial.print("Raw Duration: "); Serial.println(duration);
 
-  // Print RGB values
-  Serial.print("Red: "); Serial.print(red);
-  Serial.print(" | Green: "); Serial.print(green);
-  Serial.print(" | Blue: "); Serial.println(blue);
-
-  // Detect Yellow: High Red & Green, Low Blue
-  if (red <70 && green >80 &&  green < 160 && blue >85 && blue < 130) {
-    Serial.println("Detected Color: YELLOW");
+  // If no response, print error
+  if (duration == 0) {
+    Serial.println("Error: No Echo received!");
   } else {
-    Serial.println("Detected Color: NOT YELLOW");
+    distance = (duration * 0.0343) / 2;
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
   }
-
+  
   delay(500);
+
+
+  return distance;
+}
+
+
+void loop() {
+  
+    float getdistance;
+    getdistance = distance();
+    
+    if(getdistance < 5.00)
+    {
+        send();
+    }
+    else{
+        mySerial.println("arri");
+        delay(1000);
+    
+    }
+
+    if (mySerial.available()) {
+        String receivedData = mySerial.readStringUntil('\n'); // Read incoming message
+        Serial.println("Received from Nano: " + receivedData);
+    }
+    delay(1000);
+
 }
