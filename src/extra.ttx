@@ -1,0 +1,263 @@
+
+// #include <Arduino.h>
+// // #include <Wire.h>
+// // #include <MPU6050.h>
+
+// // MPU6050 mpu;
+
+// // long previousTime = 0;
+// // float accAngleX, accAngleY, gyroAngleX, gyroAngleY, angleX, angleY;
+// // float gyroX, gyroY, gyroZ;
+// // float elapsedTime;
+// // float alpha = 0.98; // Complementary filter weight
+
+// // void setup() {
+// //     Serial.begin(115200);
+// //     Wire.begin();
+    
+// //     mpu.initialize();
+    
+// //     if (!mpu.testConnection()) {
+// //         Serial.println("MPU6050 connection failed!");
+// //         while (1);
+// //     }
+    
+// //     Serial.println("MPU6050 initialized successfully!");
+// //     delay(1000);
+// // }
+
+// // void loop() {
+// //     long currentTime = millis();
+// //     elapsedTime = (currentTime - previousTime) / 1000.0;
+// //     previousTime = currentTime;
+    
+// //     int16_t ax, ay, az, gx, gy, gz;
+// //     mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+// //     // Convert raw accelerometer data to angles
+// //     accAngleX = atan2(ay, az) * 180 / M_PI;
+// //     accAngleY = atan2(-ax, sqrt(ay * ay + az * az)) * 180 / M_PI;
+
+// //     // Convert raw gyro data to angular velocity (dps)
+// //     gyroX = gx / 131.0;
+// //     gyroY = gy / 131.0;
+// //     gyroZ = gz / 131.0;
+
+// //     // Integrate gyro data to get angles
+// //     gyroAngleX += gyroX * elapsedTime;
+// //     gyroAngleY += gyroY * elapsedTime;
+
+// //     // Complementary filter to combine accelerometer and gyroscope values
+// //     angleX = alpha * (angleX + gyroX * elapsedTime) + (1 - alpha) * accAngleX;
+// //     angleY = alpha * (angleY + gyroY * elapsedTime) + (1 - alpha) * accAngleY;
+
+// //     // Display angles in Serial Monitor
+// //     Serial.print("Roll (X): "); Serial.print(angleX); Serial.print("°  ");
+// //     Serial.print("Pitch (Y): "); Serial.print(angleY); Serial.println("°");
+
+// //     delay(50);
+// // }
+
+
+// #include <HardwareSerial.h>
+// #define TRIG_PIN 4
+// #define ECHO_PIN 15
+
+// // HardwareSerial mySerial(1);  // Use UART1
+
+// // void setup() {
+// //     Serial.begin(115200);
+   
+// //     pinMode(TRIG_PIN, OUTPUT);
+// //     pinMode(ECHO_PIN, INPUT);
+// //     mySerial.begin(9600, SERIAL_8N1, 16, 17); // RX=16, TX=17
+// // }
+// // void send () {
+    
+// //         mySerial.println("arrived");
+// //         delay(3000);
+    
+// // }
+// // void send2() {
+// //     mySerial.println("RED");
+// //     delay(3000);
+// // }
+
+// // float distance () {
+    
+// //   long duration;
+// //   float distance;
+
+// //   // Trigger the sensor
+// //   digitalWrite(TRIG_PIN, LOW);
+// //   delayMicroseconds(2);
+// //   digitalWrite(TRIG_PIN, HIGH);
+// //   delayMicroseconds(15);  // Increased pulse width
+// //   digitalWrite(TRIG_PIN, LOW);
+
+// //   // Measure echo duration
+// //   duration = pulseIn(ECHO_PIN, HIGH);
+// //   Serial.print("Raw Duration: "); Serial.println(duration);
+
+// //   // If no response, print error
+// //   if (duration == 0) {
+// //     Serial.println("Error: No Echo received!");
+// //   } else {
+// //     distance = (duration * 0.0343) / 2;
+// //     Serial.print("Distance: ");
+// //     Serial.print(distance);
+// //     Serial.println(" cm");
+// //   }
+  
+// //   delay(500);
+
+
+// //   return distance;
+// // }
+
+
+// // void loop() {
+  
+// //     float getdistance;
+// //     getdistance = distance();
+    
+// //     if(getdistance < 5.00)
+// //     {
+// //         send();
+// //     }
+// //     else{
+// //         mySerial.println("arri");
+// //         delay(1000);
+    
+// //     }
+
+// //     if (mySerial.available()) {
+// //         String receivedData = mySerial.readStringUntil('\n'); // Read incoming message
+// //         Serial.println("Received from Nano: " + receivedData);
+// //     }
+    
+   
+
+
+// //     delay(1000);
+
+// // }
+// // #include <Adafruit_MPU6050.h>
+// // #include <Adafruit_Sensor.h>
+// // #include <Wire.h>
+// // #include <Arduino.h>
+
+// // Adafruit_MPU6050 mpu;
+
+// // // Variables for angle calculation
+// // float angleX = 0, angleY = 0, angleZ = 0;
+// // unsigned long prevTime = 0;
+
+// // void setup(void) {
+// //   Serial.begin(115200);
+// //   while (!Serial)
+// //     delay(10); // will pause Zero, Leonardo, etc until serial console opens
+
+// //   Serial.println("Adafruit MPU6050 test!");
+
+// //   // Try to initialize!
+// //   if (!mpu.begin()) {
+// //     Serial.println("Failed to find MPU6050 chip");
+// //     while (1) {
+// //       delay(10);
+// //     }
+// //   }
+// //   Serial.println("MPU6050 Found!");
+
+// //   Serial.println("");
+// //   prevTime = millis(); // Initialize the time variable
+// // }
+
+// // void loop() {
+// //   // Get current time
+// //   unsigned long currentTime = millis();
+// //   float deltaTime = (currentTime - prevTime) / 1000.0; // Convert ms to seconds
+// //   prevTime = currentTime; // Update previous time
+
+// //   /* Get new sensor events with the readings */
+// //   sensors_event_t a, g, temp;
+// //   mpu.getEvent(&a, &g, &temp);
+
+// //   /* Compute angles from gyroscope data */
+// //   angleX += g.gyro.x * deltaTime * (180.0 / PI); // Convert rad/s to degrees
+// //   angleY += g.gyro.y * deltaTime * (180.0 / PI);
+// //   angleZ += g.gyro.z * deltaTime * (180.0 / PI);
+
+// //   /* Print out the values */
+// //   Serial.print("AccelX: ");
+// //   Serial.print(a.acceleration.x);
+// //   Serial.print(", AccelY: ");
+// //   Serial.print(a.acceleration.y);
+// //   Serial.print(", AccelZ: ");
+// //   Serial.print(a.acceleration.z);
+
+// //   Serial.print(", GyroX: ");
+// //   Serial.print(g.gyro.x);
+// //   Serial.print(", GyroY: ");
+// //   Serial.print(g.gyro.y);
+// //   Serial.print(", GyroZ: ");
+// //   Serial.print(g.gyro.z);
+
+// //   Serial.print(", AngleX: ");
+// //   Serial.print(angleX);
+// //   Serial.print("°, AngleY: ");
+// //   Serial.print(angleY);
+// //   Serial.print("°, AngleZ: ");
+// //   Serial.println(angleZ);
+
+// //   delay(200);
+// // }
+
+
+// #define S0  5
+// #define S1  18
+// #define S2  19
+// #define S3  21
+// #define sensorOut 4
+
+// int redFreq = 0;
+// int greenFreq = 0;
+// int blueFreq = 0;
+
+// void setup() {
+//     Serial.begin(115200);
+    
+//     pinMode(S0, OUTPUT);
+//     pinMode(S1, OUTPUT);
+//     pinMode(S2, OUTPUT);
+//     pinMode(S3, OUTPUT);
+//     pinMode(sensorOut, INPUT);
+    
+//     // Set scaling to 20% (for better reading stability)
+//     digitalWrite(S0, HIGH);
+//     digitalWrite(S1, LOW);
+// }
+
+// void loop() {
+//     // Read Red
+//     digitalWrite(S2, LOW);
+//     digitalWrite(S3, LOW);
+//     redFreq = pulseIn(sensorOut, LOW);
+    
+//     // Read Green
+//     digitalWrite(S2, HIGH);
+//     digitalWrite(S3, HIGH);
+//     greenFreq = pulseIn(sensorOut, LOW);
+    
+//     // Read Blue
+//     digitalWrite(S2, LOW);
+//     digitalWrite(S3, HIGH);
+//     blueFreq = pulseIn(sensorOut, LOW);
+
+//     // Print the frequency values
+//     Serial.print("Red: "); Serial.print(redFreq);
+//     Serial.print("  Green: "); Serial.print(greenFreq);
+//     Serial.print("  Blue: "); Serial.println(blueFreq);
+
+//     delay(500);
+// }
