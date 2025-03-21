@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
-#include "ultrasonic.h"  // Assumed to have getUltrasonicDistance()
-#include "coloursensor.h" // Assumed to have getColor()
+#include "ultrasonic.h"
+#include "coloursensor.h"
 
 // Motor Driver Pins
 #define AIN1 27
@@ -12,12 +12,16 @@
 #define PWMB 32
 
 // Encoder Pins
-#define LEFT_ENCODER_A 13
-#define LEFT_ENCODER_B 21
-#define RIGHT_ENCODER_A 22
-#define RIGHT_ENCODER_B 23
+#define ENCODER_A1 13  // Motor 1 Encoder A
+#define ENCODER_B1 22  // Motor 1 Encoder B
+#define ENCODER_A2 21  // Motor 2 Encoder A
+#define ENCODER_B2 23  // Motor 2 Encoder B
 
-// Movement Parameters
+// Encoder counters
+volatile int encoderCount1 = 0;
+volatile int encoderCount2 = 0;
+
+// Target distance in centimeters
 #define TARGET_DISTANCE_CM 30
 #define WHEEL_DIAMETER_CM 6.5
 #define WHEEL_CIRCUMFERENCE_CM (WHEEL_DIAMETER_CM * 3.14159)
@@ -25,122 +29,116 @@
 #define GEAR_RATIO 21.3
 #define PULSES_PER_WHEEL_REV (ENCODER_PULSES_PER_REV * GEAR_RATIO)
 #define TARGET_PULSES ((TARGET_DISTANCE_CM / WHEEL_CIRCUMFERENCE_CM) * PULSES_PER_WHEEL_REV)
-#define TURN_PULSES 165  // Adjustable via calibration
 
-// PID Constants (Tune these)
-#define KP 1.0
-#define KI 0.05
-#define KD 0.1
+// Encoder-based 90-degree turn (19 cm wheelbase)
+#define WHEEL_DISTANCE_CM 19
+// For a 90-degree turn, each wheel needs to travel an arc that is 1/4 of the circumference of the circle with diameter = wheel distance
+// Arc length = (PI * wheel_distance) / 4
+// Number of wheel rotations = arc length / wheel circumference
+// Number of pulses = rotations * pulses per rotation
+#define TURN_PULSES 155  // Adjusted value for more accurate 90-degree turn
 
-// Encoder Counters
-volatile int leftEncoderCount = 0;
-volatile int rightEncoderCount = 0;
-
-// State Machine
-enum State { IDLE, MOVING_FORWARD, TURNING_RIGHT, TURNING_LEFT, OBSTACLE_AVOID };
-State currentState = IDLE;
-
-// Timing
-unsigned long lastUpdate = 0;
-const unsigned long INTERVAL = 50;
-
-// Motor Class
-class Motor {
-public:
-    Motor(int in1, int in2, int pwm) : pin1(in1), pin2(in2), pwmPin(pwm) {
-        pinMode(pin1, OUTPUT);
-        pinMode(pin2, OUTPUT);
-        pinMode(pwmPin, OUTPUT);
-    }
-    void forward(int speed) {
-        digitalWrite(pin1, HIGH);
-        digitalWrite(pin2, LOW);
-        analogWrite(pwmPin, speed);
-    }
-    void backward(int speed) {
-        digitalWrite(pin1, LOW);
-        digitalWrite(pin2, HIGH);
-        analogWrite(pwmPin, speed);
-    }
-    void stop() { analogWrite(pwmPin, 0); }
-private:
-    int pin1, pin2, pwmPin;
-};
-
-// Instantiate Motors
-Motor leftMotor(AIN1, AIN2, PWMA);
-Motor rightMotor(BIN1, BIN2, PWMB);
-
-// Encoder ISRs with Quadrature
-void IRAM_ATTR leftEncoderISR() {
-    if (digitalRead(LEFT_ENCODER_A) == digitalRead(LEFT_ENCODER_B)) {
-        leftEncoderCount++;
-    } else {
-        leftEncoderCount--;
-    }
+// Encoder Interrupt Service Routines
+void IRAM_ATTR encoder1ISR() {
+  encoderCount1++;
 }
 
-void IRAM_ATTR rightEncoderISR() {
-    if (digitalRead(RIGHT_ENCODER_A) == digitalRead(RIGHT_ENCODER_B)) {
-        rightEncoderCount++;
-    } else {
-        rightEncoderCount--;
-    }
+void IRAM_ATTR encoder2ISR() {
+  encoderCount2++;
 }
 
-// PID Control
-int baseSpeed = 80;
-float error, lastError = 0, integral = 0;
-
-void adjustMotorSpeeds() {
-    error = leftEncoderCount - rightEncoderCount; // Difference between encoders
-    integral += error;
-    float derivative = error - lastError;
-    float correction = KP * error + KI * integral + KD * derivative;
-
-    int leftSpeed = baseSpeed + correction;
-    int rightSpeed = baseSpeed - correction;
-
-    leftSpeed = constrain(leftSpeed, 0, 255);
-    rightSpeed = constrain(rightSpeed, 0, 255);
-
-    leftMotor.forward(leftSpeed);
-    rightMotor.forward(rightSpeed);
-
-    lastError = error;
-}
-
-// Movement Functions
+// Motor movement functions
 void moveForward(int speed) {
-    baseSpeed = speed;
-    leftEncoderCount = 0;
-    rightEncoderCount = 0;
-    currentState = MOVING_FORWARD;
+    digitalWrite(AIN1, HIGH);
+    digitalWrite(AIN2, LOW);
+    analogWrite(PWMA, speed);
+    digitalWrite(BIN1, HIGH);
+    digitalWrite(BIN2, LOW);
+    analogWrite(PWMB, speed);
 }
 
-void turnRight90Degrees() {
-    leftEncoderCount = 0;
-    rightEncoderCount = 0;
-    leftMotor.forward(150);
-    rightMotor.backward(150);
-    currentState = TURNING_RIGHT;
-}
-
-void turnLeft90Degrees() {
-    leftEncoderCount = 0;
-    rightEncoderCount = 0;
-    leftMotor.backward(150);
-    rightMotor.forward(150);
-    currentState = TURNING_LEFT;
+void moveBackward(int speed) {
+    digitalWrite(AIN1, LOW);
+    digitalWrite(AIN2, HIGH);
+    analogWrite(PWMA, speed);
+    digitalWrite(BIN1, LOW);
+    digitalWrite(BIN2, HIGH);
+    analogWrite(PWMB, speed);
 }
 
 void stopMotors() {
-    leftMotor.stop();
-    rightMotor.stop();
-    currentState = IDLE;
+    analogWrite(PWMA, 0);
+    analogWrite(PWMB, 0);
 }
 
-// HardwareSerial for communication
+// Accurate 90-degree right turn using encoder counts
+// Motor movement functions with reduced speed
+// Adjusted TURN_PULSES based on your encoder readings
+#define TURN_PULSES 148  // Reduced from 171 to match observed behavior
+
+// Motor movement functions with reduced speed
+void turnRight90Degrees() {
+    encoderCount1 = 0;
+    encoderCount2 = 0;
+    
+    Serial.println("Starting right turn");
+
+    // Reduce speed for finer control
+    int turnSpeed = 120; // Reduced speed for better precision
+
+    // Motor 1 Forward, Motor 2 Backward (Pivot turn)
+    digitalWrite(AIN1, HIGH);
+    digitalWrite(AIN2, LOW);
+    analogWrite(PWMA, turnSpeed);
+    digitalWrite(BIN1, LOW);
+    digitalWrite(BIN2, HIGH);
+    analogWrite(PWMB, turnSpeed);
+
+    // Monitor both encoders
+    while (encoderCount1 < TURN_PULSES && encoderCount2 < TURN_PULSES) {
+        Serial.print("Turn Right - Encoder1: ");
+        Serial.print(encoderCount1);
+        Serial.print(" Encoder2: ");
+        Serial.println(encoderCount2);
+        delay(10);
+    }
+    
+    stopMotors();
+    Serial.println("Right turn completed");
+}
+
+void turnLeft90Degrees() {
+    encoderCount1 = 0;
+    encoderCount2 = 0;
+    
+    Serial.println("Starting left turn");
+
+    // Reduce speed for finer control
+    int turnSpeed = 40; // Reduced speed for better precision
+
+    // Motor 1 Backward, Motor 2 Forward (Pivot turn)
+    digitalWrite(AIN1, LOW);
+    digitalWrite(AIN2, HIGH);
+    analogWrite(PWMA, turnSpeed);
+    digitalWrite(BIN1, HIGH);
+    digitalWrite(BIN2, LOW);
+    analogWrite(PWMB, turnSpeed);
+
+    // Monitor both encoders
+    while (encoderCount1 < TURN_PULSES && encoderCount2 < TURN_PULSES) {
+        Serial.print("Turn Left - Encoder1: ");
+        Serial.print(encoderCount1);
+        Serial.print(" Encoder2: ");
+        Serial.println(encoderCount2);
+        delay(10);
+    }
+    
+    stopMotors();
+    Serial.println("Left turn completed");
+}
+
+
+
 HardwareSerial mySerial(1);
 
 void setup() {
@@ -149,64 +147,177 @@ void setup() {
     setupcoloursensor();
     mySerial.begin(9600, SERIAL_8N1, 16, 17);
 
-    pinMode(LEFT_ENCODER_A, INPUT_PULLUP);
-    pinMode(LEFT_ENCODER_B, INPUT_PULLUP);
-    pinMode(RIGHT_ENCODER_A, INPUT_PULLUP);
-    pinMode(RIGHT_ENCODER_B, INPUT_PULLUP);
+    pinMode(AIN1, OUTPUT);
+    pinMode(AIN2, OUTPUT);
+    pinMode(PWMA, OUTPUT);
+    pinMode(BIN1, OUTPUT);
+    pinMode(BIN2, OUTPUT);
+    pinMode(PWMB, OUTPUT);
 
-    attachInterrupt(digitalPinToInterrupt(LEFT_ENCODER_A), leftEncoderISR, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(RIGHT_ENCODER_A), rightEncoderISR, CHANGE);
+    // Encoder pins as input with pullup resistors
+    pinMode(ENCODER_A1, INPUT_PULLUP);
+    pinMode(ENCODER_B1, INPUT_PULLUP);
+    pinMode(ENCODER_A2, INPUT_PULLUP);
+    pinMode(ENCODER_B2, INPUT_PULLUP);
+
+    // Attach interrupts to encoder pins
+    attachInterrupt(digitalPinToInterrupt(ENCODER_A1), encoder1ISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_A2), encoder2ISR, RISING);
+    
+    Serial.println("Setup complete");
+    Serial.print("TARGET_PULSES for 30cm: ");
+    Serial.println(TARGET_PULSES);
+    Serial.print("TURN_PULSES for 90 degrees: ");
+    Serial.println(TURN_PULSES);
 }
 
 void loop() {
-    unsigned long currentTime = millis();
-    if (currentTime - lastUpdate >= INTERVAL) {
-        lastUpdate = currentTime;
+    encoderCount1 = 0;
+    encoderCount2 = 0;
+    int forwardCount = 0;
 
-        // Sensor Integration
-        float distance = getDistance(); // From ultrasonic.h
-        if (distance < 10.0 && currentState != OBSTACLE_AVOID) {
+    for (int i = 0; i < 5; i++) {
+        Serial.println("Moving forward 30cm");
+        moveForward(30);
+    
+        // Monitor both encoders for straight line
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            Serial.print("Encoder1: ");
+            Serial.print(encoderCount1);
+            Serial.print(" Encoder2: ");
+            Serial.println(encoderCount2);
+            
+            // Balance motors if needed
+            if (encoderCount1 > encoderCount2 + 5) {
+                analogWrite(PWMA, 75);
+                analogWrite(PWMB, 85);
+            } else if (encoderCount2 > encoderCount1 + 5) {
+                analogWrite(PWMA, 85);
+                analogWrite(PWMB, 75);
+            } else {
+                analogWrite(PWMA, 80);
+                analogWrite(PWMB, 80);
+            }
+            
+            delay(50);
+        }
+
+        stopMotors();
+        Serial.println("Stopped after 30cm");
+        delay(1000);
+        
+        Serial.println("Turning right 90 degrees");
+        turnRight90Degrees();
+        Serial.println("Turn complete");
+        delay(1000);
+
+        encoderCount1 = 0;
+        encoderCount2 = 0;
+
+        Serial.println("Moving forward until obstacle");
+        moveForward(80);
+        while (true) {
+            float distance = getDistance();
+            Serial.print("Distance: ");
+            Serial.println(distance);
+            
+            // Balance motors for straight line
+            if (encoderCount1 > encoderCount2 + 5) {
+                analogWrite(PWMA, 75);
+                analogWrite(PWMB, 85);
+            } else if (encoderCount2 > encoderCount1 + 5) {
+                analogWrite(PWMA, 85);
+                analogWrite(PWMB, 75);
+            } else {
+                analogWrite(PWMA, 80);
+                analogWrite(PWMB, 80);
+            }
+            
+            if (distance < 5) { 
+                stopMotors();
+                forwardCount = (encoderCount1 + encoderCount2) / 2; // Average of both encoders
+                Serial.print("Arrived at obstacle. Forward count: ");
+                Serial.println(forwardCount);
+                mySerial.println("Arrived");
+                break;
+            }
+            delay(50);
+        }
+
+        Serial.println("Waiting for 'done' message");
+        String message = "";
+        while (message != "done") {
+            if (mySerial.available()) {
+                message = mySerial.readStringUntil('\n');
+                message.trim();
+                Serial.print("Received message: ");
+                Serial.println(message);
+            }
+            delay(100);
+        }
+        
+        if (message == "done") {
+            Serial.println("Moving backward");
+            encoderCount1 = 0;
+            encoderCount2 = 0;
+            moveBackward(80);
+
+            while (encoderCount1 < forwardCount || encoderCount2 < forwardCount) {
+                Serial.print("Encoder1: ");
+                Serial.print(encoderCount1);
+                Serial.print(" Encoder2: ");
+                Serial.println(encoderCount2);
+                
+                // Balance motors if needed
+                if (encoderCount1 > encoderCount2 + 5) {
+                    analogWrite(PWMA, 75);
+                    analogWrite(PWMB, 85);
+                } else if (encoderCount2 > encoderCount1 + 5) {
+                    analogWrite(PWMA, 85);
+                    analogWrite(PWMB, 75);
+                } else {
+                    analogWrite(PWMA, 80);
+                    analogWrite(PWMB, 80);
+                }
+                
+                delay(50);
+            }
             stopMotors();
-            currentState = OBSTACLE_AVOID;
-            Serial.println("Obstacle detected!");
+            Serial.println("Backward movement complete");
+
+            Serial.println("Turning left 90 degrees");
+            turnLeft90Degrees();
+            Serial.println("Turn complete");
+            delay(1000);
+
+            Serial.println("Moving forward 30cm");
+            encoderCount1 = 0;
+            encoderCount2 = 0;
+            moveForward(80);
+            while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+                Serial.print("Encoder1: ");
+                Serial.print(encoderCount1);
+                Serial.print(" Encoder2: ");
+                Serial.println(encoderCount2);
+                
+                // Balance motors if needed
+                if (encoderCount1 > encoderCount2 + 5) {
+                    analogWrite(PWMA, 75);
+                    analogWrite(PWMB, 85);
+                } else if (encoderCount2 > encoderCount1 + 5) {
+                    analogWrite(PWMA, 85);
+                    analogWrite(PWMB, 75);
+                } else {
+                    analogWrite(PWMA, 80);
+                    analogWrite(PWMB, 80);
+                }
+                
+                delay(50);
+            }
+            stopMotors();
+            Serial.println("Forward movement complete");
         }
 
-        // State Machine
-        switch (currentState) {
-            case IDLE:
-                Serial.println("Moving forward 30cm");
-                moveForward(80);
-                break;
-
-            case MOVING_FORWARD:
-                adjustMotorSpeeds();
-                if (leftEncoderCount >= TARGET_PULSES && rightEncoderCount >= TARGET_PULSES) {
-                    stopMotors();
-                    Serial.println("Turning right 90 degrees");
-                    turnRight90Degrees();
-                }
-                break;
-
-            case TURNING_RIGHT:
-                if (abs(leftEncoderCount) >= TURN_PULSES && abs(rightEncoderCount) >= TURN_PULSES) {
-                    stopMotors();
-                }
-                break;
-
-            case TURNING_LEFT:
-                if (abs(leftEncoderCount) >= TURN_PULSES && abs(rightEncoderCount) >= TURN_PULSES) {
-                    stopMotors();
-                }
-                break;
-
-            case OBSTACLE_AVOID:
-                turnRight90Degrees();
-                break;
-        }
-
-        // Encoder Diagnostics
-        if (leftEncoderCount == 0 && rightEncoderCount == 0 && currentState != IDLE) {
-            Serial.println("Warning: Encoders not responding!");
-        }
+        delay(1000);
     }
 }
