@@ -3,5 +3,8 @@
 
 float getDistance();
 void setupUltrasonic();
+// ultrasonic.h
+extern float filteredDistance; // Declaration only
+
 
 #endif
