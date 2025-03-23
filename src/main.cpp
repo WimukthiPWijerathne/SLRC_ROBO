@@ -7,7 +7,7 @@
 Sensor sensor;
 HardwareSerial mySerial(1);
 
-// Motor Driver Pins (unchanged)
+// Motor Driver Pins and other definitions remain unchanged
 #define AIN1 27
 #define AIN2 26
 #define PWMA 14
@@ -19,33 +19,29 @@ HardwareSerial mySerial(1);
 #define PWM_CHANNEL_A 0
 #define PWM_CHANNEL_B 1
 
-// Encoder Pins (unchanged)
 #define ENCODER_A1 13
 #define ENCODER_B1 22
 #define ENCODER_A2 21
 #define ENCODER_B2 23
 
-// Encoder counters
 volatile int encoderCount1 = 0;
 volatile int encoderCount2 = 0;
 
-// Movement Parameters (unchanged)
 #define TARGET_DISTANCE_CM 30
-#define WHEEL_DIAMETER_CM 6.5
+#define WHEEL_DIAMETER_CM 6.4
 #define WHEEL_CIRCUMFERENCE_CM (WHEEL_DIAMETER_CM * 3.14159)
 #define ENCODER_PULSES_PER_REV 11
 #define GEAR_RATIO 21.3
 #define PULSES_PER_WHEEL_REV (ENCODER_PULSES_PER_REV * GEAR_RATIO)
 #define TARGET_PULSES ((TARGET_DISTANCE_CM / WHEEL_CIRCUMFERENCE_CM) * PULSES_PER_WHEEL_REV)
-#define TURN_PULSES 155
+#define TURN_PULSES 160
 
-// ISR for Encoders
 void IRAM_ATTR encoder1ISR() { encoderCount1++; }
 void IRAM_ATTR encoder2ISR() { encoderCount2++; }
 
-#define KP 2.23
-#define KI 0
-#define KD 0.2
+#define KP 2.31
+#define KI 0.0
+#define KD 0.95
 
 int lastError = 0;
 int integral = 0;
@@ -71,7 +67,6 @@ void moveForward(int baseSpeed) {
     
     lastError = error;
 }
-
 void moveBackward(int baseSpeed) {
     int error = encoderCount1 - encoderCount2;
     integral += error;
@@ -104,7 +99,7 @@ void turnRight90Degrees() {
     encoderCount1 = 0;
     encoderCount2 = 0;
     Serial.println("Turning Right");
-    int turnSpeed = 80;
+    int turnSpeed = 60;
     digitalWrite(AIN1, HIGH);
     digitalWrite(AIN2, LOW);
     analogWrite(PWMA, turnSpeed);
@@ -120,14 +115,14 @@ void turnLeft90Degrees() {
     encoderCount1 = 0;
     encoderCount2 = 0;
     Serial.println("Starting left turn");
-    int turnSpeed = 40;
+    int turnSpeed = 60;
     digitalWrite(AIN1, LOW);
     digitalWrite(AIN2, HIGH);
     analogWrite(PWMA, turnSpeed);
     digitalWrite(BIN1, HIGH);
     digitalWrite(BIN2, LOW);
     analogWrite(PWMB, turnSpeed);
-    while (encoderCount1 < TURN_PULSES && encoderCount2 < TURN_PULSES) {
+    while (encoderCount1 < TURN_PULSES-5 && encoderCount2 < TURN_PULSES-5) {
         Serial.print("Turn Left - Encoder1: ");
         Serial.print(encoderCount1);
         Serial.print(" Encoder2: ");
@@ -142,32 +137,35 @@ void turnLeft90Degrees() {
 
 
 void setup() {
-    Serial.begin(9600);
-    sensor.begin();
-    setupUltrasonic();
-    setupcoloursensor();
+// Setup remains unchanged
+Serial.begin(9600);
+sensor.begin();
+setupUltrasonic();
+setupcoloursensor();
 
-    mySerial.begin(9600, SERIAL_8N1, 16, 17);
-    ledcSetup(PWM_CHANNEL_A, PWM_FREQ, PWM_RES);
-    ledcSetup(PWM_CHANNEL_B, PWM_FREQ, PWM_RES);
-    
-    ledcAttachPin(PWMA, PWM_CHANNEL_A);
-    ledcAttachPin(PWMB, PWM_CHANNEL_B);
+mySerial.begin(9600, SERIAL_8N1, 16, 17);
+ledcSetup(PWM_CHANNEL_A, PWM_FREQ, PWM_RES);
+ledcSetup(PWM_CHANNEL_B, PWM_FREQ, PWM_RES);
 
-    pinMode(AIN1, OUTPUT);
-    pinMode(AIN2, OUTPUT);
-    pinMode(PWMA, OUTPUT);
-    pinMode(BIN1, OUTPUT);
-    pinMode(BIN2, OUTPUT);
-    pinMode(PWMB, OUTPUT);
+ledcAttachPin(PWMA, PWM_CHANNEL_A);
+ledcAttachPin(PWMB, PWM_CHANNEL_B);
 
-    pinMode(ENCODER_A1, INPUT_PULLUP);
-    pinMode(ENCODER_B1, INPUT_PULLUP);
-    pinMode(ENCODER_A2, INPUT_PULLUP);
-    pinMode(ENCODER_B2, INPUT_PULLUP);
+pinMode(AIN1, OUTPUT);
+pinMode(AIN2, OUTPUT);
+pinMode(PWMA, OUTPUT);
+pinMode(BIN1, OUTPUT);
+pinMode(BIN2, OUTPUT);
+pinMode(PWMB, OUTPUT);
 
-    attachInterrupt(digitalPinToInterrupt(ENCODER_A1), encoder1ISR, RISING);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_A2), encoder2ISR, RISING);
+pinMode(ENCODER_A1, INPUT_PULLUP);
+pinMode(ENCODER_B1, INPUT_PULLUP);
+pinMode(ENCODER_A2, INPUT_PULLUP);
+pinMode(ENCODER_B2, INPUT_PULLUP);
+
+attachInterrupt(digitalPinToInterrupt(ENCODER_A1), encoder1ISR, RISING);
+attachInterrupt(digitalPinToInterrupt(ENCODER_A2), encoder2ISR, RISING);
+
+Serial.println("Setup Complete");
 
     Serial.println("Setup Complete");
 }
@@ -176,107 +174,204 @@ void loop() {
     int sensorValue = sensor.readValue();
     Serial.println(sensorValue);
     int forwardCount = 0;
-
-    moveForward(40);
-    while (sensorValue > 500) {
-        sensorValue = sensor.readValue();
-        Serial.println(sensorValue);
-        delay(1000);
-    }
-    stopMotors();
+    float distance = getDistance();
     delay(1000);
 
-    moveForward(30);
-    while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {}
-    stopMotors();
-    delay(1000);
-    turnRight90Degrees();
-    stopMotors();
-    delay(500);
-    encoderCount1 = 0;
-    encoderCount2 = 0;
-    moveForward(80);
+   
 
-    while (true) {
-        float distance = getDistance();
-        Serial.print("Distance: ");
-        Serial.println(distance);
-    
-        // Define base speeds with a correction factor
-        int baseSpeed = 50;
-        int leftMotorCorrection = 48;  // Slightly reduce left motor speed
-        int rightMotorCorrection = 58; // Slightly increase right motor speed
-    
-        if (encoderCount1 > encoderCount2 + 5) {
-            // Left wheel ahead, slow it down more
-            analogWrite(PWMA, 43);  // Reduced from 45
-            analogWrite(PWMB, 37);  // Increased from 35
-        } else if (encoderCount2 > encoderCount1 + 5) {
-            // Right wheel ahead, slow it down more
-            analogWrite(PWMA, 37);  // Increased from 35
-            analogWrite(PWMB, 43);  // Reduced from 45
-        } else {
-            // When encoders are close, apply correction to go straight
-            analogWrite(PWMA, leftMotorCorrection);  // 48 instead of 50
-            analogWrite(PWMB, rightMotorCorrection); // 52 instead of 50
-        }
-    
-        if (distance < 4) {
-            stopMotors();
+    // Initial move forward with increased speed
+
+    for (int i=0 ; i<5 ; i++){encoderCount1 = 0;
+        encoderCount2 = 0;
+        moveForward(60);  // Changed from 80 to 60 as requested
+        while (sensorValue > 500) {
+            sensorValue = sensor.readValue();
+            Serial.println(sensorValue);
             delay(1000);
-            forwardCount = (encoderCount1 + encoderCount2) / 2;
-            Serial.print("Arrived at obstacle. Forward count: ");
-            Serial.println(forwardCount);
-            mySerial.println("Arrived");
-            break;
         }
-        delay(50);
-    }
+        stopMotors();
+        delay(1000);
     
-
-    Serial.println("Waiting for 'done' message");
-    String message = "";
-    while (message != "Done") {
-        if (mySerial.available()) {
-            message = mySerial.readStringUntil('\n');
-            message.trim();
-            Serial.print("Received message: ");
-            Serial.println(message);
-        }
-        delay(100);
-    }
-
-    if (message == "Done") {
-        Serial.println("Moving backward");
+        // Precise distance movement using encoders
         encoderCount1 = 0;
         encoderCount2 = 0;
-        moveBackward(80); // Use moveBackward instead of moveForward
-
-        while (abs(encoderCount1) < forwardCount || abs(encoderCount2) < forwardCount) {
-            Serial.print("Encoder1: ");
-            Serial.print(encoderCount1);
-            Serial.print(" Encoder2: ");
-            Serial.println(encoderCount2);
-
-            if (encoderCount1 > encoderCount2 + 5) {
-                analogWrite(PWMA, 75);
-                analogWrite(PWMB, 85);
-            } else if (encoderCount2 > encoderCount1 + 5) {
-                analogWrite(PWMA, 85);
-                analogWrite(PWMB, 75);
-            } else {
-                analogWrite(PWMA, 80);
-                analogWrite(PWMB, 80);
+        moveForward(80);  // Changed from 30 to 60
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+        stopMotors();
+        delay(1000);
+        
+        turnRight90Degrees();
+        stopMotors();
+        delay(500);
+        
+        // Main movement with improved encoder correction
+        encoderCount1 = 0;
+        encoderCount2 = 0;
+        while (true) {
+            float distance = getDistance();
+            Serial.print("Distance: ");
+            Serial.println(distance);
+            
+            moveForward(60);  // Increased from original
+            
+            // Enhanced encoder-based correction
+            int error = encoderCount1 - encoderCount2;
+          
+            
+            if (distance < 18) {
+                stopMotors();
+                delay(1000);
+                forwardCount = (encoderCount1 + encoderCount2) / 2;
+                Serial.print("Arrived at obstacle. Forward count: ");
+                Serial.println(forwardCount);
+                mySerial.println("Arrived");
+                break;
             }
             delay(50);
         }
+    
+        // Message waiting and backward movement remain unchanged
+        Serial.println("Waiting for 'done' message");
+        String message = "";
+        while (message != "Done") {
+            if (mySerial.available()) {
+                message = mySerial.readStringUntil('\n');
+                message.trim();
+                Serial.print("Received message: ");
+                Serial.println(message);
+            }
+            delay(100);
+        }
+    
+        if (message == "Done") {
+            Serial.println("Moving backward");
+            encoderCount1 = 0;
+            encoderCount2 = 0;
+            moveBackward(80);
+            
+            while (abs(encoderCount1) < forwardCount || abs(encoderCount2) < forwardCount) {
+                Serial.print("Encoder1: ");
+                Serial.print(encoderCount1);
+                Serial.print(" Encoder2: ");
+                Serial.println(encoderCount2);
+                delay(50);
+            }
+            stopMotors();
+            delay(5000);
+            Serial.println("Backward movement complete");
+    
+            Serial.println("Turning left 90 degrees");
+            turnLeft90Degrees();
+            Serial.println("Turn complete");
+            delay(1000);
+        }}
         stopMotors();
-        delay(5000);
-        Serial.println("Backward movement complete");
+        moveForward(60);  // Changed from 30 to 60
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+        moveForward(60);
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+        moveForward(60);
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+        moveForward(60);
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
 
-        Serial.println("Turning left 90 degrees");
+
+        stopMotors();
+        delay(500);
+        turnRight90Degrees();
+        moveForward(60);  // Changed from 30 to 60
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+        moveForward(60);  // Changed from 30 to 60
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+        moveForward(60);
+        while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+            // PID correction is handled in moveForward function
+        }
+
+        stopMotors();
+        delay(500);
         turnLeft90Degrees();
-        Serial.println("Turn complete");
-        delay(1000);
-    }
+        stopMotors();
+        delay(500);
+         while (true) {
+            float distance = getDistance();
+            Serial.print("Distance: ");
+            Serial.println(distance);
+            encoderCount1 = 0;
+            encoderCount2 = 0;
+            
+            moveForward(60);  // Increased from original
+            
+            // Enhanced encoder-based correction
+            while (true ){
+                if (distance < 10) {
+                    stopMotors();
+                    delay(1000);
+                    forwardCount = (encoderCount1 + encoderCount2) / 2;
+                    Serial.print("Arrived at obstacle. Forward count: ");
+                    Serial.println(forwardCount);
+                    mySerial.println("Arrived");
+                    break;
+                }
+            }
+            
+           
+            delay(50);
+            encoderCount1 = 0;
+            encoderCount2 = 0;
+            moveBackward(80);
+            
+            while (abs(encoderCount1) < forwardCount || abs(encoderCount2) < forwardCount) {
+                Serial.print("Encoder1: ");
+                Serial.print(encoderCount1);
+                Serial.print(" Encoder2: ");
+                Serial.println(encoderCount2);
+                delay(50);
+            turnRight90Degrees();
+            moveForward(60);
+            while (encoderCount1 < TARGET_PULSES || encoderCount2 < TARGET_PULSES) {
+                // PID correction is handled in moveForward function
+            }
+            turnLeft90Degrees();
+            moveForward(60);
+
+            
+            while(true) {
+                if (distance < 10) {
+                    stopMotors();
+                    delay(1000);
+                    forwardCount = (encoderCount1 + encoderCount2) / 2;
+                    Serial.print("Arrived at obstacle. Forward count: ");
+                    Serial.println(forwardCount);
+                    mySerial.println("Arrived2");
+                    break;
+                }
+
+            }
+           
+            
+           
+            
+        }
+        stopMotors();
+        delay(100000);
+       
+
+
+    
+}
 }
